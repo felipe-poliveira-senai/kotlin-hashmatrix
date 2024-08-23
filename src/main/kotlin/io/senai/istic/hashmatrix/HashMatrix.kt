@@ -42,6 +42,12 @@ class HashMatrix(
     private val rows: LinkedHashMap<String, HashMatrixRow> = LinkedHashMap();
 
     /**
+     * Returns a copy-safe instance of row hashes
+     */
+    val rowHashes: LinkedHashMap<String, HashMatrixRow>
+        get() = LinkedHashMap(rows)
+
+    /**
      * Add and return a HashMatrixRow associated with this HashMatrix
      */
     fun addRow(rowId: String): HashMatrixRow {
@@ -127,6 +133,9 @@ class HashMatrixRow(
      * Store the hashes of the hash matrix row
      */
     private val hashes: LinkedHashMap<String, ByteArray> = LinkedHashMap()
+
+    val columnsHashes: LinkedHashMap<String, ByteArray>
+        get() = LinkedHashMap(hashes)
 
     /**
      * Store the row message digester seeder
