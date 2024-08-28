@@ -4,6 +4,7 @@ import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
 import com.mongodb.kotlin.client.MongoClient
 import org.bson.Document
+import org.bson.types.ObjectId
 import org.example.io.senai.istic.ext.toDocument
 import org.example.io.senai.istic.ext.toHexString
 import org.example.io.senai.istic.hashmatrix.HashMatrix
@@ -15,7 +16,7 @@ import java.io.FileReader
 import java.security.MessageDigest
 
 fun main2() {
-    val statelessHashMatrix0 = StatelessHashMatrix({MessageDigest.getInstance("SHA256")})
+    val statelessHashMatrix0 = StatelessHashMatrix(MessageDigest.getInstance("SHA256"))
 
     val row0 = statelessHashMatrix0.addRow("row0")
     row0.putValue("col0".toByteArray())
@@ -27,7 +28,7 @@ fun main2() {
     println("row0.hash: ${row0.currentHash.toHexString()}")
     println("row1.hash: ${row1.currentHash.toHexString()}")
 
-    val statelessHashMatrix1 = StatelessHashMatrix({MessageDigest.getInstance("SHA256")})
+    val statelessHashMatrix1 = StatelessHashMatrix(MessageDigest.getInstance("SHA256"))
 
     val row0HM1 = statelessHashMatrix1.addRow("row0")
     row0HM1.putValue("col0".toByteArray())
@@ -46,12 +47,44 @@ fun main2() {
 
 
 fun main() {
-    storeHashMatrix()
+    loadHashMatrixFromCsv()
+}
+
+fun loadHashMatrixFromCsv() {
+    val messageDigester = MessageDigest.getInstance("SHA256")
+    val hashMatrices = mutableListOf<StatelessHashMatrix>()
+    for (i in 1..200) {
+        hashMatrices.add(csvToHashMatrix(File("C:\\tmp\\customers-10000.csv"), messageDigester, "Index"))
+    }
+    val difference = hashMatrices[3].compare(hashMatrices[133])
+    println()
+}
+
+fun fetchHashMatrix() {
+    val uri = "mongodb://localhost:27017"
+    val settings = MongoClientSettings.builder()
+        .applyConnectionString(ConnectionString(uri))
+        .retryWrites(true)
+        .build()
+
+    val mongoClient = MongoClient.create(settings)
+    val database = mongoClient.getDatabase("tests")
+    val collection = database.getCollection<Document>("hashmatrices")
+
+    val matrices = mutableListOf<Document>()
+
+    val filter = Document()
+    filter.append("_id", ObjectId("66cf32d60cc1711500a54a66"))
+    for (i in 1..200) {
+        val result = collection.find(filter).firstOrNull() ?: throw Exception("Could not find hash matrix with $filter")
+        matrices.add(result)
+    }
+    println()
 }
 
 fun storeHashMatrix() {
     var start = System.currentTimeMillis()
-    val csvHashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000.csv"), {MessageDigest.getInstance("SHA256")}, "Index")
+    val csvHashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-10000.csv"), MessageDigest.getInstance("SHA256"), "Index")
 
     val uri = "mongodb://localhost:27017"
     val settings = MongoClientSettings.builder()
@@ -60,9 +93,9 @@ fun storeHashMatrix() {
         .build()
 
     val mongoClient = MongoClient.create(settings)
-    val database = mongoClient.getDatabase("hashmatrix")
+    val database = mongoClient.getDatabase("tests")
 
-    val collection = database.getCollection<Document>("hashmatrix")
+    val collection = database.getCollection<Document>("hashmatrices")
 
     val document = csvHashMatrix.toDocument()
     collection.insertOne(document)
@@ -74,12 +107,12 @@ fun storeHashMatrix() {
 fun compareHashMatrix() {
     // CSV 1
     var start = System.currentTimeMillis()
-    val csvHashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000.csv"), {MessageDigest.getInstance("SHA256")}, "Index")
+    val csvHashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000.csv"), MessageDigest.getInstance("SHA256"), "Index")
     println("1 - Took ${System.currentTimeMillis() - start}")
 
     // CSV 2
     start = System.currentTimeMillis()
-    val csv2HashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000-2.csv"), {MessageDigest.getInstance("SHA256")}, "Index")
+    val csv2HashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000-2.csv"), MessageDigest.getInstance("SHA256"), "Index")
     println("2 - Took ${System.currentTimeMillis() - start}")
 
     // Calculate hashes
@@ -97,9 +130,9 @@ fun compareHashMatrix() {
     printHashMatrixComparison(difference)
 }
 
-fun csvToHashMatrix(csvFile: File, messageDigestSeeder: () -> MessageDigest, fieldInCsvUsedAsId: String? = null): StatelessHashMatrix {
+fun csvToHashMatrix(csvFile: File, messageDigester: MessageDigest, fieldInCsvUsedAsId: String? = null): StatelessHashMatrix {
     val csv = CsvUtils.readCsvWithNamedFields(FileReader(csvFile), useFirstLineAsFieldNames = true)
-    val hashMatrix = StatelessHashMatrix(messageDigestSeeder)
+    val hashMatrix = StatelessHashMatrix(messageDigester)
     var rowIndex = -1
     for (line in csv) {
         rowIndex++

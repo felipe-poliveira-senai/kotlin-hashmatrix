@@ -42,6 +42,8 @@ class CsvUtils {
                         yield(fieldsMap)
                     }
                 }
+
+                reader.close()
             }
         }
 

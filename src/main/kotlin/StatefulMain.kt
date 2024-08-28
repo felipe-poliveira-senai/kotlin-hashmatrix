@@ -22,7 +22,7 @@ fun main() {
 
 fun storeHashMatrix() {
     var start = System.currentTimeMillis()
-    val csvHashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000.csv"), {MessageDigest.getInstance("SHA256")}, "Index")
+    val csvHashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000.csv"), MessageDigest.getInstance("SHA256"), "Index")
 
     val uri = "mongodb://localhost:27017"
     val settings = MongoClientSettings.builder()
@@ -45,12 +45,12 @@ fun storeHashMatrix() {
 fun compareHashMatrix() {
     // CSV 1
     var start = System.currentTimeMillis()
-    val csvHashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000.csv"), {MessageDigest.getInstance("SHA256")}, "Index")
+    val csvHashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000.csv"), MessageDigest.getInstance("SHA256"), "Index")
     println("1 - Took ${System.currentTimeMillis() - start}")
 
     // CSV 2
     start = System.currentTimeMillis()
-    val csv2HashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000-2.csv"), {MessageDigest.getInstance("SHA256")}, "Index")
+    val csv2HashMatrix = csvToHashMatrix(File("C:\\tmp\\customers-100000-2.csv"), MessageDigest.getInstance("SHA256"), "Index")
     println("2 - Took ${System.currentTimeMillis() - start}")
 
     // Calculate hashes
@@ -68,9 +68,9 @@ fun compareHashMatrix() {
     printHashMatrixComparison(difference)
 }
 
-fun csvToHashMatrix(csvFile: File, messageDigestSeeder: () -> MessageDigest, fieldInCsvUsedAsId: String? = null): StatelessHashMatrix {
+fun csvToHashMatrix(csvFile: File, messageDigester: MessageDigest, fieldInCsvUsedAsId: String? = null): StatelessHashMatrix {
     val csv = CsvUtils.readCsvWithNamedFields(FileReader(csvFile), useFirstLineAsFieldNames = true)
-    val hashMatrix = StatelessHashMatrix(messageDigestSeeder)
+    val hashMatrix = StatelessHashMatrix(messageDigester)
     var rowIndex = -1
     for (line in csv) {
         rowIndex++

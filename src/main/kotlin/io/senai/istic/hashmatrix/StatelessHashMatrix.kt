@@ -7,24 +7,9 @@ class StatelessHashMatrix(
     /**
      * Function that create a message digester function
      */
-    private val messageDigesterSeeder: () -> MessageDigest
+    private val messageDigester: MessageDigest
 ) {
 
-    companion object {
-        /**
-         * Parse an Array<HashMatrixSerializer> into a HashMatrix
-         */
-        fun fromHashMatrixSerdeCollection(data: Array<HashMatrixSerializer>, messageDigesterSeeder: () -> MessageDigest): HashMatrix {
-            val matrix = HashMatrix(messageDigesterSeeder)
-            for (row in data) {
-                val matrixRow = matrix.addRow(row.hashMatrixRowIdentifier())
-                for (col in row.serialize()) {
-                    matrixRow.putValue(col.first, col.second)
-                }
-            }
-            return matrix
-        }
-    }
 
     /**
      * Semaphore that controls access to hash calculation function
@@ -35,11 +20,6 @@ class StatelessHashMatrix(
      * Store the matrix total hash
      */
     private var matrixHash: ByteArray? = null
-
-    /**
-     * Store the instance that calculates the hash for the matrix
-     */
-    private val messageDigester = messageDigesterSeeder()
 
     /**
      * Store the rows hashes
@@ -62,7 +42,7 @@ class StatelessHashMatrix(
         }
 
         // create, add in the collection and return a new HashMatrixRow
-        val row = StatelessHashMatrixRow(this, rowId, messageDigesterSeeder)
+        val row = StatelessHashMatrixRow(this, rowId, messageDigester)
         this.rows[rowId] = row
         return row
     }
@@ -105,7 +85,7 @@ class StatelessHashMatrixRow(
     /**
      * The message digester instance used in the row
      */
-    private val messageDigesterSeeder: () -> MessageDigest,
+    private val messageDigester: MessageDigest
 ) {
 
 
@@ -117,7 +97,6 @@ class StatelessHashMatrixRow(
      */
     private val hashCalculationSemaphore: Semaphore = Semaphore(1)
 
-    private val messageDigester = messageDigesterSeeder()
 
     /**
      * Store the row message digester seeder
@@ -130,7 +109,7 @@ class StatelessHashMatrixRow(
     fun putValue(value: ByteArray) {
 
         // create a new instance of the message digester for the new value and store it on the map
-        val newValueMessageDigester = messageDigesterSeeder()
+        val newValueMessageDigester = messageDigester
         val digestedValue = newValueMessageDigester.digest(value)
 
         // update the hash from the row and from the matrix
