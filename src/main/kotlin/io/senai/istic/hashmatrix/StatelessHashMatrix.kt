@@ -3,7 +3,7 @@ package org.example.io.senai.istic.hashmatrix
 import java.security.MessageDigest
 import java.util.concurrent.Semaphore
 
-class HashMatrix(
+class StatelessHashMatrix(
     /**
      * Function that create a message digester function
      */
@@ -37,89 +37,66 @@ class HashMatrix(
     private var matrixHash: ByteArray? = null
 
     /**
+     * Store the instance that calculates the hash for the matrix
+     */
+    private val messageDigester = messageDigesterSeeder()
+
+    /**
      * Store the rows hashes
      */
-    private val rows: LinkedHashMap<String, HashMatrixRow> = LinkedHashMap();
+    private val rows: MutableMap<String, StatelessHashMatrixRow> = mutableMapOf()
 
     /**
      * Returns a copy-safe instance of row hashes
      */
-    val rowHashes: LinkedHashMap<String, HashMatrixRow>
-        get() = LinkedHashMap(rows)
+    val rowHashes
+        get() = rows
 
     /**
      * Add and return a HashMatrixRow associated with this HashMatrix
      */
-    fun addRow(rowId: String): HashMatrixRow {
+    fun addRow(rowId: String): StatelessHashMatrixRow {
         // assert that is not duplicated
         if (this.rows.containsKey(rowId)) {
             throw Exception("There is already a key \"${rowId}\" added into the HashMatrix")
         }
 
         // create, add in the collection and return a new HashMatrixRow
-        val row = HashMatrixRow(this, rowId, messageDigesterSeeder)
+        val row = StatelessHashMatrixRow(this, rowId, messageDigesterSeeder)
         this.rows[rowId] = row
         return row
     }
 
     val currentHash: ByteArray
         get() {
-            // lock other threads to calculate the hash simultaneously
-            hashCalculationSemaphore.acquire()
-
-            // if the row hash is defined return it
-            if (matrixHash != null) {
-                return matrixHash as ByteArray;
-            }
-
-            try {
-                // check for valid amount of rows
-                if (rows.isEmpty()) {
-                    throw Exception("Could not access the currentHash from the HashMatrix as no value is present into it. " +
-                            "Use .addRow().addValue() before calling this method")
-                }
-
-                // calculate the rowHash
-                val messageDigester = messageDigesterSeeder()
-                for (rowEntry in rows) {
-                    val digestedValue = rowEntry.value.currentHash
-                    matrixHash = messageDigester.digest(matrixHash?.plus(digestedValue) ?: digestedValue)
-
-                }
-
-            } finally {
-                // release lock after calculation
-                hashCalculationSemaphore.release()
-            }
-
-            return matrixHash as ByteArray
+            return matrixHash ?: throw Exception("Matrix hash was never defined. Use .addRow().putValue() before calling this method")
         }
 
     /**
      * Compare this instance of HashMatrix and compare it with other matrix
      */
-    fun compare(otherMatrix: HashMatrix, comparisonMode: ComparisonMode = ComparisonMode.Shallow) = HashMatrixComparison(this, otherMatrix, comparisonMode)
+    fun compare(otherMatrix: StatelessHashMatrix, comparisonMode: ComparisonMode = ComparisonMode.Shallow) = StatelessHashMatrixComparison(this, otherMatrix, comparisonMode)
 
     /**
      * Get a row by its id. If the row does not exist returns null
      */
-    fun getRowById(rowId: String): HashMatrixRow? = rows[rowId]
+    fun getRowById(rowId: String): StatelessHashMatrixRow? = rows[rowId]
 
     /**
      * Returns a read-only instance of the rows
      */
     fun rows() = rows.toMap()
 
-    fun resetHash() {
-        matrixHash = null
+    fun updateHash(newDigestedValue: ByteArray) {
+        matrixHash = if (matrixHash == null) messageDigester.digest(newDigestedValue) else messageDigester.digest(matrixHash?.plus(newDigestedValue))
     }
 }
 
-class HashMatrixRow(
+class StatelessHashMatrixRow(
     /**
      * The matrix that create the row
      */
-    private val matrix: HashMatrix,
+    private val matrix: StatelessHashMatrix,
     /**
      * The identifier of the HashMatrixRow
      */
@@ -130,10 +107,17 @@ class HashMatrixRow(
      */
     private val messageDigesterSeeder: () -> MessageDigest,
 ) {
+
+
+    val currentHash: ByteArray
+        get() = rowHash ?: throw Exception("Could not fetch currentHash from row because not value was add into it. Use .putValue before calling this method")
+
     /**
-     * Store the hashes of the hash matrix row
+     * Semaphore that controls access to hash calculation function
      */
-    private val hashes: LinkedHashMap<String, ByteArray> = LinkedHashMap()
+    private val hashCalculationSemaphore: Semaphore = Semaphore(1)
+
+    private val messageDigester = messageDigesterSeeder()
 
     /**
      * Store the row message digester seeder
@@ -141,83 +125,30 @@ class HashMatrixRow(
     private var rowHash: ByteArray? = null
 
     /**
-     * Semaphore that controls access to hash calculation function
-     */
-    private val hashCalculationSemaphore: Semaphore = Semaphore(1)
-
-    /**
-     * Return a new instance of the hashes of the hash matrix row
-     */
-    fun hashes() = hashes.toMap()
-
-    val currentHash: ByteArray
-        get() {
-            try {
-                // If the row hash is defined return it
-                if (rowHash != null) {
-                    return rowHash as ByteArray;
-                }
-
-                // lock the semaphore
-                hashCalculationSemaphore.acquire()
-
-                // If after acquiring the lock of the semaphore another thread has already defined the rowHash
-                // release the lock and return it without calculating it again
-                if (rowHash != null) {
-                    hashCalculationSemaphore.release()
-                    return rowHash as ByteArray;
-                }
-
-                // if not values are passed to the HashMatrixRow
-                if (hashes.isEmpty()) {
-                    throw Exception("No value was added in the row \"${rowId}\". Use HashMatrixRow.putValue() before using this method")
-                }
-
-                // calculate the rowHash
-                val messageDigester = messageDigesterSeeder()
-                for (hashEntry in hashes) {
-                    val digestedValue = hashEntry.value
-                    rowHash = messageDigester.digest(rowHash?.plus(digestedValue) ?: digestedValue)
-                }
-            } finally {
-                // release semaphore
-                hashCalculationSemaphore.release()
-            }
-
-            return rowHash as ByteArray
-        }
-
-    /**
-     * Return a column hash identified by the column id
-     */
-    fun getColumnById(columnId: String) = hashes[columnId]
-
-    /**
      *
      */
-    fun putValue(colId: String, value: ByteArray) {
-
-        // Everytime the value is changed the hash should be calculated again
-        matrix.resetHash()
-        rowHash = null
+    fun putValue(value: ByteArray) {
 
         // create a new instance of the message digester for the new value and store it on the map
         val newValueMessageDigester = messageDigesterSeeder()
         val digestedValue = newValueMessageDigester.digest(value)
-        hashes[colId] = digestedValue
+
+        // update the hash from the row and from the matrix
+        rowHash = if (rowHash == null) messageDigester.digest(digestedValue) else messageDigester.digest(rowHash?.plus(digestedValue))
+        matrix.updateHash(digestedValue)
     }
 
 }
 
-class HashMatrixComparison(
+class StatelessHashMatrixComparison(
     /**
      * The matrix used as reference to be compared
      */
-    val referenceMatrix: HashMatrix,
+    val referenceMatrix: StatelessHashMatrix,
     /**
      * The compared hash matrix
      */
-    val comparedMatrix: HashMatrix,
+    val comparedMatrix: StatelessHashMatrix,
     /**
      * Check how the comparison algorithm will run.
      * If Shallow: Do not identify the changes between the row columns
@@ -226,7 +157,7 @@ class HashMatrixComparison(
     val comparisonMode: ComparisonMode
 ) {
 
-    val rowsWithDifferences: MutableList<HashMatrixRowDifference> = mutableListOf()
+    val rowsWithDifferences: MutableList<StatelessHashMatrixRow> = mutableListOf()
 
     init {
         lookForDifferences(comparisonMode)
@@ -249,13 +180,13 @@ class HashMatrixComparison(
 
             // if the compared matrix row does not exist consider it removed
             if (comparedMatrixRow == null) {
-                rowsWithDifferences.add(HashMatrixRowDifference(referenceMatrixRow, Difference.Removed))
+                rowsWithDifferences.add(StatelessHashMatrixRow(referenceMatrixRow, Difference.Removed))
                 continue
             }
 
             // if the reference matrix row does not match the compared matrix row considered it changed
             if (!referenceMatrixRow.currentHash.contentEquals(comparedMatrixRow.currentHash)) {
-                rowsWithDifferences.add(HashMatrixRowDifference(referenceMatrixRow, Difference.Changed))
+                rowsWithDifferences.add(StatelessHashMatrixRow(referenceMatrixRow, Difference.Changed))
                 continue
             }
         }
@@ -265,7 +196,7 @@ class HashMatrixComparison(
 
             // if the reference matrix does not have the row from the compared matrix row consider it Added
             if (referenceMatrix.getRowById(comparedMatrixRowEntry.key) == null) {
-                rowsWithDifferences.add(HashMatrixRowDifference(comparedMatrixRowEntry.value, Difference.Added))
+                rowsWithDifferences.add(StatelessHashMatrixRow(comparedMatrixRowEntry.value, Difference.Added))
                 continue
             }
         }
@@ -279,8 +210,19 @@ class HashMatrixComparison(
     /**
      * Store information about hash matrix comparison differences
      */
-    class HashMatrixRowDifference(
-        val referenceRow: HashMatrixRow,
+    class StatelessHashMatrixRow(
+        val referenceRow: org.example.io.senai.istic.hashmatrix.StatelessHashMatrixRow,
         val difference: Difference,
     )
+}
+
+enum class ComparisonMode {
+    Shallow,
+    Deep,
+}
+
+enum class Difference {
+    Changed,
+    Added,
+    Removed,
 }

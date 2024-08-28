@@ -1,61 +1,48 @@
 package org.example.io.senai.istic.io
 
+import java.io.BufferedReader
+import java.io.Reader
+
 class CsvUtils {
     companion object {
 
         fun readCsvWithNamedFields(
-            content: String,
+            input: Reader,
             fieldDelimiter: Char = ',',
-            lineDelimiter: String = System.lineSeparator(),
             useFirstLineAsFieldNames: Boolean = false
-        ): List<Map<String, String>> {
+        ): Sequence<Map<String, String>> {
 
-            // Store the content of the csv that will be returned
-            val csvContent = mutableListOf<Map<String, String>>()
-
-            // store the names that will be used in the csv fields
+            val reader = BufferedReader(input)
             var fieldNames: Array<String>? = null
 
-            // iterate over each line
-            var lineIndex = -1
-            for (line in content.split(lineDelimiter)) {
-                lineIndex++
-                val fields = readCsvLine(line, fieldDelimiter)
+            return sequence {
+                reader.useLines { lines ->
+                    lines.forEachIndexed { _, line ->
+                        val fields = readCsvLine(line, fieldDelimiter)
 
-                // ignore if no field is returned from the readCsvLine method
-                if (fields.isEmpty()) {
-                    continue
+                        if (fields.isEmpty()) {
+                            return@forEachIndexed
+                        }
+
+                        if (useFirstLineAsFieldNames && fieldNames == null) {
+                            fieldNames = fields
+                            return@forEachIndexed
+                        }
+
+                        if (fieldNames != null && fieldNames!!.size < fields.size) {
+                            throw Exception("The amount of field names used to identify the csv line fields is lesser than the number " +
+                                    "of fields. Field names: ${fieldNames!!.joinToString(",")}; Fields: ${fields.joinToString(",")}")
+                        }
+
+                        val fieldsMap = fields.mapIndexed { fieldIndex, field ->
+                            val fieldName = fieldNames?.getOrNull(fieldIndex) ?: fieldIndex.toString()
+                            fieldName to field
+                        }.toMap()
+
+                        yield(fieldsMap)
+                    }
                 }
-
-                // if the first line is marked to be used as field names set it and go to the next line
-                if (useFirstLineAsFieldNames && fieldNames == null) {
-                    fieldNames = fields
-                    continue
-                }
-
-                // if the number of field names is lesser than the number of fields throw an exception
-                if (fieldNames != null && fieldNames.count() < fields.count()) {
-                    throw Exception("The amount of field names used to identify the csv line fields is lesser than the number " +
-                            "of fields. Field names: ${fieldNames}; Fields: $fields")
-                }
-
-                // iterate over each field
-                val fieldsMap = mutableMapOf<String, String>()
-                var fieldIndex = -1
-                for (field in fields) {
-                    fieldIndex++
-
-                    // the fieldName will be the values stored in 'fieldNames' if defined, or the current index
-                    val fieldName = if (fieldNames != null) fieldNames[fieldIndex] else fieldIndex.toString()
-
-                    // add the current field into the fieldMap
-                    fieldsMap[fieldName] = field
-                }
-
-                // include the map into the csvContent array
-                csvContent.add(fieldsMap)
             }
-            return csvContent
         }
 
         /**

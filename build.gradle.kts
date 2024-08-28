@@ -18,6 +18,8 @@ dependencies {
     // https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-serialization-json-jvm
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.7.1")
 
+    implementation("org.mongodb:mongodb-driver-kotlin-sync:5.1.1")
+
 
 }
 
