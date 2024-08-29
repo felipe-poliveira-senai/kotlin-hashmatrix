@@ -6,7 +6,10 @@ import java.io.Reader
 import java.security.MessageDigest
 
 
-
+/**
+ * This is an auxiliary object that helps to generate a valid HashMatrix. Use .addRow() to create
+ * a valid matrix.
+ */
 class HashMatrixBuilder(
     /**
      * A callback that create MessageDigest instances that will be used into the hash matrix structures
@@ -56,7 +59,8 @@ class HashMatrixBuilder(
      * Store the reference for the current working row. The current working row
      * is the last added row into the HashMatrixBuilder. This variable is used to control
      * possible de-synchronization when for example `val r0 = matrixBuilder.addRow('r0')` and
-     * `val r1 = matrixBuilder.addRow('r1')` and we try to `r0.addValue()` after adding `r1`
+     * `val r1 = matrixBuilder.addRow('r1')` and we try to `r0.addValue()` after adding `r1`.
+     * For the matrix to work the values should be always added in order, making it a linear algorithm O(n)
      */
     private var currentWorkingRow: HashMatrixRowBuilder? = null
 
@@ -212,7 +216,7 @@ class HashMatrixComparison(
             }
         }
 
-        // all rows contained int he compared hash matrix that does not exists in the reference
+        // all rows contained int he compared hash matrix that does not exist in the reference
         // is considered ADDED
         for ((comparedRowId, _) in comparedHashMatrix.rowHashes) {
             if (!referenceHashMatrix.rowHashes.containsKey(comparedRowId)) {
